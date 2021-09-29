@@ -16,6 +16,10 @@ export default {
             }, process.env.SECRET_TOKEN);
             delete user._doc.password
 
+            if (req.body?.device_token) {
+               User.findByIdAndUpdate(user._id, { device_token: req.body.device_token }).exec()
+            }
+
             res.json({ success: true, values: { ...user._doc, token }, message: 'login_success' })
          } else {
             res.status(400).json({ success: false, values: {}, message: 'login_failed' })

@@ -1,6 +1,7 @@
 import { Chat, User } from '../models'
 import { exec } from '../../utils/controllerUtils'
 import { socketServer } from '../../socket'
+import pushNotification from '../pushNotification/pushNotification.controller'
 
 export default {
    list: async (req, res) => {
@@ -15,7 +16,7 @@ export default {
          const values = await Chat.find({ 'users_id._id': req.userId }).sort({updatedAt: -1}).exec()
 
          values.map(chat => {
-            const message = chat._doc.messages[chat._doc.messages.length - 1]//.at(-1)
+            const message = chat._doc.messages[0]//.at(-1)
             chat._doc.messages = message
             return chat
          })
@@ -53,10 +54,6 @@ export default {
                   {'users_id._id': userFrom._id},
                   {'users_id._id': userTo._id}
                ]
-               /*'$and': [{
-                  'users_id._id': userFrom._id,
-                  'users_id._id': userTo._id
-               }]*/
             }).exec()
             
             
@@ -66,13 +63,15 @@ export default {
             }
             
             //Si no existen, los agrego
+            const userFromFind = await User.findById(userFrom._id).exec()
+            userFrom.name = `${userFromFind.name} ${userFromFind.last_name}`
+
+            const userToFind = await User.findById(userTo._id).exec()
+            userTo.name = `${userToFind.name} ${userToFind.last_name}`
+            userTo.device_token = userToFind.device_token
+
             let newChat = {}
             if (!chat) {
-               const userFromFind = await User.findById(userFrom._id).exec()
-               userFrom.name = `${userFromFind.name} ${userFromFind.last_name}`
-   
-               const userToFind = await User.findById(userTo._id).exec()
-               userTo.name = `${userToFind.name} ${userToFind.last_name}`
 
                newChat = await Chat.create({
                   users_id: [userFrom, userTo],
@@ -80,19 +79,27 @@ export default {
                })
             } else {
                const messages = chat.messages
-               messages.push(message)
+               messages.unshift(message)
                newChat = await Chat.findByIdAndUpdate(chat._id, { messages }, { new: true })
             }
 
             if (newChat) {
-               console.log('hacemos el emit a:', userTo.name)
                socketServer.emit('receive-message', {
                   ...newChat._doc,
-                  messages: newChat._doc.messages[newChat._doc.messages.length - 1],
+                  messages: newChat._doc.messages[0],
                   userToId: userTo._id,
                   userFromId: userFrom._id
                })
-               console.log('finaliza el emit')
+               
+               if (userTo?.device_token) {
+                  pushNotification.sendToDevice({
+                     query: {
+                        device_token: userTo.device_token,
+                        title: userFrom.name,
+                        body: body.content
+                     }
+                  })
+               }
             }
             
             res.json({success: true, values: newChat?._doc, message: 'send_message_success'})

@@ -5,6 +5,7 @@ const schema = new mongoose.Schema({
    last_name: { type: String, required: true },
    email: { type: String, required: true },
    password: { type: String, required: true },
+   device_token: String,
    status: { type: String, default: '1' }
 });
 
